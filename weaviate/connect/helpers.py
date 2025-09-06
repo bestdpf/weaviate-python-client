@@ -579,9 +579,11 @@ def use_async_with_embedded(
 def use_async_with_custom(
     http_host: str,
     http_port: int,
+    http_prefix: str,
     http_secure: bool,
     grpc_host: str,
     grpc_port: int,
+    grpc_prefix: str,
     grpc_secure: bool,
     headers: Optional[Dict[str, str]] = None,
     additional_config: Optional[AdditionalConfig] = None,
@@ -648,9 +650,11 @@ def use_async_with_custom(
         ConnectionParams.from_params(
             http_host=http_host,
             http_port=http_port,
+            http_prefix=http_prefix,
             http_secure=http_secure,
             grpc_host=grpc_host,
             grpc_port=grpc_port,
+            grpc_prefix=grpc_prefix,
             grpc_secure=grpc_secure,
         ),
         auth_client_secret=__parse_auth_credentials(auth_credentials),

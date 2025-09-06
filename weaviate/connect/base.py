@@ -22,6 +22,7 @@ MAX_GRPC_MESSAGE_LENGTH = 104858000  # 10mb, needs to be synchronized with GRPC 
 class ProtocolParams(BaseModel):
     host: str
     port: int
+    prefix: str
     secure: bool
 
     @field_validator("host")
@@ -45,7 +46,7 @@ class ConnectionParams(BaseModel):
     grpc: ProtocolParams
 
     @classmethod
-    def from_url(cls, url: str, grpc_port: int, grpc_secure: bool = False) -> "ConnectionParams":
+    def from_url(cls, url: str, grpc_port: int, grpc_secure: bool = False, grpc_prefix='') -> "ConnectionParams":
         parsed_url = urlparse(url)
         if parsed_url.scheme not in ["http", "https"]:
             raise ValueError(f"Unsupported scheme: {parsed_url.scheme}")
@@ -54,15 +55,22 @@ class ConnectionParams(BaseModel):
         else:
             port = parsed_url.port
 
+        if parsed_url.path and parsed_url.path != '/':
+            http_prefix = parsed_url.path.rstrip('/')
+        else:
+            http_prefix = ''
+
         return cls(
             http=ProtocolParams(
                 host=cast(str, parsed_url.hostname),
                 port=port,
+                prefix=http_prefix,
                 secure=parsed_url.scheme == "https",
             ),
             grpc=ProtocolParams(
                 host=cast(str, parsed_url.hostname),
                 port=grpc_port,
+                prefix=http_prefix,
                 secure=grpc_secure or parsed_url.scheme == "https",
             ),
         )
@@ -73,26 +81,30 @@ class ConnectionParams(BaseModel):
         http_host: str,
         http_port: int,
         http_secure: bool,
+        http_prefix: str,
         grpc_host: str,
         grpc_port: int,
         grpc_secure: bool,
+        grpc_prefix: str
     ) -> "ConnectionParams":
         return cls(
             http=ProtocolParams(
                 host=http_host,
                 port=http_port,
+                prefix=http_prefix,
                 secure=http_secure,
             ),
             grpc=ProtocolParams(
                 host=grpc_host,
                 port=grpc_port,
+                prefix=grpc_prefix,
                 secure=grpc_secure,
             ),
         )
 
     @model_validator(mode="after")
     def _check_port_collision(self: T) -> T:
-        if self.http.host == self.grpc.host and self.http.port == self.grpc.port:
+        if self.http.host == self.grpc.host and self.http.port == self.grpc.port and self.http.prefix == self.grpc.prefix:
             raise ValueError("http.port and grpc.port must be different if using the same host")
         return self
 
@@ -102,7 +114,7 @@ class ConnectionParams(BaseModel):
 
     @property
     def _grpc_target(self) -> str:
-        return f"{self.grpc.host}:{self.grpc.port}"
+        return f"{self.grpc.host}:{self.grpc.port}/{self.grpc.prefix}"
 
     def _grpc_channel(
         self, proxies: Dict[str, str], grpc_msg_size: Optional[int], is_async: bool
@@ -142,7 +154,7 @@ class ConnectionParams(BaseModel):
 
     @property
     def _http_url(self) -> str:
-        return f"{self._http_scheme}://{self.http.host}:{self.http.port}"
+        return f"{self._http_scheme}://{self.http.host}:{self.http.port}/{self.http.prefix}"
 
 
 def _get_proxies(proxies: Union[dict, str, Proxies, None], trust_env: bool) -> Dict[str, str]:
